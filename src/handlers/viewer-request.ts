@@ -10,15 +10,18 @@ import type {
   Handler
 } from 'aws-lambda';
 
+import {
+  DEFAULT_INTEGRATION_TYPE,
+  DEFAULT_SDK_NAME,
+  DEFAULT_SDK_VERSION
+} from '../config/constants';
 import { appConfig } from '../config/env';
-import {DEFAULT_INTEGRATION_TYPE, DEFAULT_SDK_NAME, DEFAULT_SDK_VERSION} from "../config/constants";
 
 type EdgeEvent = CloudFrontRequestEvent | CloudFrontResponseEvent;
 type EdgeResult = CloudFrontRequestResult | CloudFrontResponseResult;
 type TrackableRequest = Pick<CloudFrontRequest, 'clientIp' | 'method' | 'uri' | 'querystring' | 'headers'>;
 
 const TRACK_START_HEADER = 'x-siteline-track-start-ms';
-const TRACK_START_HEADER_KEY = 'X-Siteline-Track-Start-Ms';
 
 const INVALID_EVENT_RESPONSE: CloudFrontResultResponse = {
   status: '400',
@@ -49,7 +52,7 @@ const getHeaderValue = (headers: CloudFrontHeaders, headerName: string): string 
 const setHeaderValue = (headers: CloudFrontHeaders, headerName: string, value: string): void => {
   headers[headerName.toLowerCase()] = [
     {
-      key: TRACK_START_HEADER_KEY,
+      key: headerName,
       value
     }
   ];
@@ -60,19 +63,14 @@ const parseStatus = (status: string): number => {
   return Number.isInteger(parsed) && parsed >= 100 && parsed <= 599 ? parsed : 0;
 };
 
-const parseTrackStartTimestamp = (request: TrackableRequest): number | undefined => {
-  const rawValue = getHeaderValue(request.headers, TRACK_START_HEADER);
-  if (!rawValue) {
-    return undefined;
+const computeDurationMs = (request: TrackableRequest): number => {
+  const rawStart = getHeaderValue(request.headers, TRACK_START_HEADER);
+  if (!rawStart) {
+    return 0;
   }
 
-  const parsed = Number.parseInt(rawValue, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const computeDurationMs = (request: TrackableRequest): number => {
-  const startedAtMs = parseTrackStartTimestamp(request);
-  if (startedAtMs === undefined) {
+  const startedAtMs = Number.parseInt(rawStart, 10);
+  if (!Number.isFinite(startedAtMs)) {
     return 0;
   }
 
@@ -94,7 +92,18 @@ const toPageviewData = (request: TrackableRequest, status: string): PageviewData
   };
 };
 
-const siteline = (() => {
+const logTrackingError = (message: string, error: unknown): void => {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  console.error(
+    JSON.stringify({
+      service: appConfig.appName,
+      message,
+      errorMessage
+    })
+  );
+};
+
+const createSitelineClient = (): Siteline | undefined => {
   const websiteKey = appConfig.siteline.websiteKey;
   if (!websiteKey) {
     return undefined;
@@ -114,20 +123,15 @@ const siteline = (() => {
       ...config,
       sdk: DEFAULT_SDK_NAME,
       sdkVersion: DEFAULT_SDK_VERSION,
-      integrationType: DEFAULT_INTEGRATION_TYPE,
+      integrationType: DEFAULT_INTEGRATION_TYPE
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown Siteline initialization error';
-    console.error(
-      JSON.stringify({
-        service: appConfig.appName,
-        message: 'Siteline initialization failed; tracking disabled.',
-        errorMessage: message
-      })
-    );
+    logTrackingError('Siteline initialization failed; tracking disabled.', error);
     return undefined;
   }
-})();
+};
+
+const siteline = createSitelineClient();
 
 const trackViewerResponse = (request: TrackableRequest, status: string): void => {
   if (!siteline) {
@@ -137,14 +141,7 @@ const trackViewerResponse = (request: TrackableRequest, status: string): void =>
   try {
     siteline.track(toPageviewData(request, status));
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown tracking error';
-    console.error(
-      JSON.stringify({
-        service: appConfig.appName,
-        message: 'Siteline track call failed; response continues unchanged.',
-        errorMessage: message
-      })
-    );
+    logTrackingError('Siteline track call failed; response continues unchanged.', error);
   }
 };
 
@@ -163,7 +160,7 @@ const handleViewerRequest = (event: CloudFrontRequestEvent): CloudFrontRequestRe
 
 const handleViewerResponse = (event: CloudFrontResponseEvent): CloudFrontResponseResult => {
   const record = event.Records[0];
-  if (!record) {
+  if (!record?.cf.response) {
     return INVALID_EVENT_RESPONSE;
   }
 
@@ -184,4 +181,7 @@ export const handler: Handler<EdgeEvent, EdgeResult> = (event) => {
   if (record.cf.config.eventType === 'viewer-request') {
     return Promise.resolve(handleViewerRequest(event as CloudFrontRequestEvent));
   }
+
+  // This function is intended only for viewer-request and viewer-response associations.
+  return Promise.resolve(INVALID_EVENT_RESPONSE);
 };

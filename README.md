@@ -81,7 +81,8 @@ aws logs tail "/aws/lambda/us-east-1.siteline-cloudfront-viewer-request" --follo
 The Lambda is attached to two CloudFront phases:
 1. **viewer-request**: stamps a start timestamp in request headers and passes request through unchanged
 2. **viewer-response**: reads response status, computes duration, and calls `siteline.track(...)`
-3. Always returns original request/response objects (fail-open behavior on tracking errors)
+3. `siteline.track(...)` is fire-and-forget in `@siteline/core`, so tracking does not block the response path
+4. Always returns original request/response objects (fail-open behavior on tracking errors)
 
 ## Troubleshooting
 

@@ -150,8 +150,13 @@ describe('viewer-request / viewer-response handler', () => {
     process.env.SITELINE_ENDPOINT = 'https://siteline.ai/v1/intake/pageview';
     process.env.SITELINE_DEBUG = 'false';
 
-    sitelineMocks.Siteline.mockClear();
-    sitelineMocks.track.mockClear();
+    sitelineMocks.track.mockReset();
+    sitelineMocks.Siteline.mockReset();
+    sitelineMocks.Siteline.mockImplementation(() => {
+      return {
+        track: sitelineMocks.track
+      };
+    });
   });
 
   it('tracks viewer-response with real status and elapsed duration', async () => {
@@ -223,7 +228,7 @@ describe('viewer-request / viewer-response handler', () => {
   });
 
   it('skips tracking when website key is missing and keeps response unchanged', async () => {
-    delete process.env.SITELINE_WEBSITE_KEY;
+    process.env.SITELINE_WEBSITE_KEY = '';
 
     const handler = await loadHandler();
 
