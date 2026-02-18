@@ -100,9 +100,7 @@ The Lambda is attached to two CloudFront phases:
   ```
 
 ## Documentation
-c
 - [GitHub Repository](https://github.com/siteline-ai/siteline-aws-cloudfront)
-- [Siteline Cloudflare Worker (reference structure)](https://github.com/siteline-ai/siteline-cloudflare-worker)
 
 ## Support
 
