@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: {
-    index: 'src/handlers/viewer-request.ts'
+    index: 'src/handlers/s3-log-processor.ts'
   },
   format: ['cjs'],
   platform: 'node',

@@ -39,4 +39,4 @@ if [[ "${copied_env_file}" == "true" ]]; then
   rm -f "${DIST_DIR}/.env"
 fi
 
-echo "Lambda package created: ${ZIP_PATH}"
+echo "S3 log processor Lambda package created: ${ZIP_PATH}"

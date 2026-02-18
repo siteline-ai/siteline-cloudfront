@@ -1,109 +1,172 @@
-# Siteline AWS CloudFront Lambda@Edge
+# Siteline AWS CloudFront S3 Log Processor
 
-Automatically track CloudFront traffic (including AI bot visits such as ChatGPT, Claude, and Perplexity) with Lambda@Edge and Siteline.
+This project tracks CloudFront traffic with Siteline.
+It processes CloudFront standard access logs from S3.
+It forwards pageview events to the Siteline API.
+
+## Architecture
+
+```text
+Existing CloudFront distribution
+  -> Standard access logs to S3
+  -> EventBridge (Object Created)
+  -> Lambda log processor (this project)
+  -> Siteline API
+```
 
 ## Prerequisites
-- AWS account with a CloudFront distribution
+
 - Node.js 18+ and npm
-- AWS CLI configured with deployment permissions
-- `jq` and `zip` installed
-- Your Siteline website key
+- AWS CLI v2
+- `jq`
+- `zip`
+- Existing CloudFront distribution configured to write standard logs to S3
+- IAM permissions for `s3`, `lambda`, `iam`, and `events` management
 
-## Installation
+## AWS CLI Login
 
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
+Use one of the following methods.
 
-2. **Configure environment values**
-   ```bash
-   cp .env.example .env
-   ```
-   Set your real `SITELINE_WEBSITE_KEY` in `.env`.
+### Option 1: Access keys
 
-3. **Build and package the Lambda artifact**
-   ```bash
-   npm run package
-   ```
+```bash
+aws configure
+aws sts get-caller-identity
+```
 
-4. **Deploy the Lambda function in us-east-1**
-   ```bash
-   npm run deploy
-   ```
+### Option 2: AWS SSO
 
-5. **Attach the function to CloudFront viewer-request**
-   ```bash
-   export DISTRIBUTION_ID=E0000000000000
-   export FUNCTION_VERSION_ARN=arn:aws:lambda:us-east-1:123456789012:function:siteline-cloudfront-viewer-request:1
-   export EVENT_TYPE=viewer-request
-   npm run attach:cloudfront
-   ```
+```bash
+aws configure sso
+aws sso login --profile <your-profile>
+aws sts get-caller-identity --profile <your-profile>
+```
 
-6. **Attach the same version to CloudFront viewer-response**
-   ```bash
-   export EVENT_TYPE=viewer-response
-   npm run attach:cloudfront
-   ```
-
-7. **Wait for CloudFront deployment propagation**
-   CloudFront updates can take several minutes before status becomes `Deployed`.
-
-## What Gets Tracked
-
-The Lambda tracks request/response telemetry as Siteline `PageviewData`:
-- `url`
-- `method`
-- `status` (from CloudFront viewer-response)
-- `duration` (elapsed time between viewer-request and viewer-response handler execution)
-- `userAgent`
-- `ref`
-- `ip`
+If you use SSO, set `AWS_PROFILE` in `.env`.
 
 ## Configuration
 
-### Update the Lambda
-After making code changes:
+```bash
+cp .env.example .env
+```
+
+Set at least:
+
+- `SITELINE_WEBSITE_KEY`
+- `LOG_BUCKET_NAME`
+- `AWS_REGION`
+- `AWS_PROFILE` (if used)
+
+## Setup Scripts
+
+The scripts are idempotent.
+They reuse existing resources when safe.
+They stop on errors.
+
+- `scripts/setup-s3.sh`  
+Creates/configures the S3 log bucket.  
+Enables S3 -> EventBridge notifications.
+
+- `scripts/setup-lambda.sh`  
+Creates/updates IAM role and Lambda.  
+Deploys the packaged function.
+
+- `scripts/setup-eventbridge.sh`  
+Creates the EventBridge rule.  
+Adds Lambda invoke permission.  
+Links S3 object-created events to Lambda.
+
+- `scripts/setup-all.sh`  
+Runs all setup scripts in order.
+
+Run via npm:
+
+```bash
+npm run setup:s3
+npm run setup:lambda
+npm run setup:eventbridge
+npm run setup:all
+```
+
+## Deployment Flow
+
+1. Install dependencies.
+
+```bash
+npm install
+```
+
+2. Build and package Lambda.
+
 ```bash
 npm run package
-npm run deploy
 ```
-Then re-attach the newly published version to both event types.
 
-### View logs
-Use CloudWatch Logs for the Lambda@Edge function (in `us-east-1` and replicated edge regions). For quick checks:
+3. Provision AWS resources.
+
 ```bash
-aws logs tail "/aws/lambda/us-east-1.siteline-cloudfront-viewer-request" --follow --region us-east-1
+npm run setup:all
 ```
 
-## How It Works
+4. Confirm CloudFront writes logs to `LOG_BUCKET_NAME`.
 
-The Lambda is attached to two CloudFront phases:
-1. **viewer-request**: stamps a start timestamp in request headers and passes request through unchanged
-2. **viewer-response**: reads response status, computes duration, and calls `siteline.track(...)`
-3. `siteline.track(...)` is fire-and-forget in `@siteline/core`, so tracking does not block the response path
-4. Always returns original request/response objects (fail-open behavior on tracking errors)
+For CI, disable prompts:
 
-## Troubleshooting
+```bash
+export AUTO_APPROVE=true
+```
 
-**No tracking events?**
-- Verify `SITELINE_WEBSITE_KEY` is set in packaged `.env`
-- Confirm Lambda is attached to **both** `viewer-request` and `viewer-response`
-- Check CloudWatch logs for tracking errors
-- Verify CloudFront distribution status is `Deployed`
+## Validation
 
-**Need to change your website key?**
-- Update `.env`
-- Re-run:
-  ```bash
-  npm run package
-  npm run deploy
-  ```
+Run local quality checks:
 
-## Documentation
-- [GitHub Repository](https://github.com/siteline-ai/siteline-aws-cloudfront)
+```bash
+npm run ci
+```
 
-## Support
+## Runtime Mapping
 
-- [GitHub Issues](https://github.com/siteline-ai/siteline-aws-cloudfront/issues)
-- Email: team@siteline.ai
+The processor reads CloudFront `#Fields` dynamically.
+It maps:
+
+- `url` from `cs-host`, `cs-uri-stem`, `cs-uri-query`
+- `method` from `cs-method`
+- `status` from `sc-status`
+- `duration` from `time-taken * 1000`
+- `userAgent` from decoded `cs(User-Agent)`
+- `ref` from `cs(Referer)`
+- `ip` from `c-ip`
+
+Invalid rows are skipped.
+Rows with invalid status or missing URI are ignored.
+
+## Debugging Tips
+
+Check caller identity:
+
+```bash
+aws sts get-caller-identity --region "${AWS_REGION}"
+```
+
+Tail Lambda logs:
+
+```bash
+aws logs tail "/aws/lambda/${LAMBDA_FUNCTION_NAME}" --follow --region "${AWS_REGION}"
+```
+
+Inspect EventBridge targets:
+
+```bash
+aws events list-targets-by-rule --name "${EVENT_RULE_NAME}" --region "${AWS_REGION}"
+```
+
+Common issues:
+
+- `AccessDenied`: missing IAM permissions.
+- No invocations: CloudFront is not writing logs to the expected bucket.
+- No events: S3 EventBridge notifications are not enabled.
+
+## Operational Notes
+
+- CloudFront standard logs are delayed. Typical delay is 5-15 minutes.
+- Costs come from S3 storage, Lambda invocations, and EventBridge events.
