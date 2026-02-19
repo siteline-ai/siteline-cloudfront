@@ -129,7 +129,7 @@ npm run ci
 The processor reads CloudFront `#Fields` dynamically.
 It maps:
 
-- `url` from `cs-host`, `cs-uri-stem`, `cs-uri-query`
+- `url` from `cs(Host)`, `cs-uri-stem`, `cs-uri-query`
 - `method` from `cs-method`
 - `status` from `sc-status`
 - `duration` from `time-taken * 1000`

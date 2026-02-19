@@ -29,7 +29,7 @@ type S3LogEvent = EventBridgeEvent<string, S3ObjectCreatedDetail>;
 const COMMENT_PREFIX = '#';
 const FIELDS_PREFIX = '#Fields:';
 
-const s3Client = new S3Client({});
+const s3Client = new S3Client({ region: process.env.AWS_REGION || process.env.S3_BUCKET_REGION });
 
 const logTrackingError = (message: string, error: unknown): void => {
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -160,7 +160,7 @@ const toPageviewData = (line: string, fieldMap: CloudFrontLogFieldMap): Pageview
     return undefined;
   }
 
-  const host = decodeLogValue(getField(columns, fieldMap, 'cs-host'));
+  const host = decodeLogValue(getField(columns, fieldMap, 'cs(Host)') ?? getField(columns, fieldMap, 'x-host-header'));
   const query = getField(columns, fieldMap, 'cs-uri-query');
   const querySuffix = query && query !== '-' ? `?${query}` : '';
   const url = host ? `https://${host}${uri}${querySuffix}` : `${uri}${querySuffix}`;
@@ -250,6 +250,8 @@ export const handler: Handler<S3LogEvent, void> = async (event) => {
   const rawLog = await getRawLogFile(bucketName, objectKey);
   const fieldMap = parseFieldMap(rawLog);
 
+  const trackPromises: Promise<void>[] = [];
+
   for (const line of rawLog.split(/\r?\n/)) {
     const trimmedLine = line.trim();
     if (!trimmedLine || trimmedLine.startsWith(COMMENT_PREFIX)) {
@@ -262,9 +264,11 @@ export const handler: Handler<S3LogEvent, void> = async (event) => {
         continue;
       }
 
-      void siteline.track(pageview);
+      trackPromises.push(siteline.track(pageview));
     } catch (error: unknown) {
       logTrackingError('Failed to parse CloudFront log row; row skipped.', error);
     }
   }
+
+  await Promise.all(trackPromises);
 };

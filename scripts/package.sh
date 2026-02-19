@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 ZIP_PATH="${LAMBDA_ZIP_PATH:-${DIST_DIR}/lambda-edge.zip}"
 ZIP_DIR="$(dirname "${ZIP_PATH}")"
-INCLUDE_ENV_FILE="${INCLUDE_ENV_FILE:-true}"
+INCLUDE_ENV_FILE="${INCLUDE_ENV_FILE:-false}"
 ENV_FILE_PATH="${ENV_FILE_PATH:-${ROOT_DIR}/.env}"
 
 if [[ ! -f "${DIST_DIR}/index.js" ]]; then

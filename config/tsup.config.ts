@@ -13,5 +13,5 @@ export default defineConfig({
   clean: true,
   outDir: 'dist',
   dts: false,
-  external: ['aws-sdk']
+  noExternal: [/@siteline\/core/, /dotenv/]
 });

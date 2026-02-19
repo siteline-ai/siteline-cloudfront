@@ -10,7 +10,7 @@ require_cmd aws
 require_cmd jq
 require_aws_identity
 
-ASSUME_ROLE_POLICY_FILE="${ROOT_DIR}/config/iam/lambda-edge-assume-role-policy.json"
+ASSUME_ROLE_POLICY_FILE="${ROOT_DIR}/config/iam/lambda-assume-role-policy.json"
 LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:-siteline-cloudfront-s3-processor}"
 LAMBDA_ROLE_NAME="${LAMBDA_ROLE_NAME:-siteline-cloudfront-s3-processor-role}"
 LAMBDA_RUNTIME="${LAMBDA_RUNTIME:-nodejs20.x}"
@@ -22,7 +22,7 @@ LAMBDA_ZIP_PATH="${LAMBDA_ZIP_PATH:-${ROOT_DIR}/dist/lambda-edge.zip}"
 LOG_BUCKET_NAME="${LOG_BUCKET_NAME:-}"
 APP_NAME="${APP_NAME:-siteline-cloudfront-s3-processor}"
 SITELINE_WEBSITE_KEY="${SITELINE_WEBSITE_KEY:-}"
-SITELINE_ENDPOINT="${SITELINE_ENDPOINT:-https://siteline.ai/v1/intake/pageview}"
+SITELINE_ENDPOINT="${SITELINE_ENDPOINT:-https://api.siteline.ai/v1/intake/pageview}"
 SITELINE_DEBUG="${SITELINE_DEBUG:-false}"
 LAMBDA_CREATE_MAX_RETRIES="${LAMBDA_CREATE_MAX_RETRIES:-8}"
 LAMBDA_CREATE_INITIAL_DELAY_SECONDS="${LAMBDA_CREATE_INITIAL_DELAY_SECONDS:-2}"
