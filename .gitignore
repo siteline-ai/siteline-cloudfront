@@ -2,8 +2,8 @@ node_modules/
 dist/*.js
 dist/*.map
 dist/*.zip
-.env
 coverage/
 .DS_Store
 .idea/
 .claude/
+config.bat
